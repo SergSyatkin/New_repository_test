@@ -1,0 +1,90 @@
+###Название проекта: My First Python Project
+Репозиторий на GitHub: https://github.com/SergSyatkin/New_repository_test
+Автор: Serg Syatkin
+Дата создания: 2025-04-05
+Описание: Учебный проект для освоения Git, GitHub и Python.
+###
+
+import sys
+from netmiko import ConnectHandler
+from getpass import getpass
+from netmiko.ssh_exception import NetMikoTimeoutException, SSHException
+import time
+
+def get_credentials():
+    try:
+        with open("credentials.txt") as f:
+            credentials = f.read().splitlines()
+            return credentials[0], credentials[1]
+    except FileNotFoundError:
+        print("Ошибка: файл 'credentials.txt' не найден")
+        sys.exit(1)
+
+def get_device_ips():
+    try:
+        with open("devices.txt") as f:
+            return f.read().splitlines()
+    except FileNotFoundError:
+        print("Ошибка: файл 'devices.txt' не найден")
+        sys.exit(1)
+
+def check_device_license(ip, username, password):
+    """
+    Проверяет наличие активных лицензий на устройстве Huawei.
+    """
+    device_params = {
+        'device_type': 'huawei',
+        'ip': ip,
+        'username': username,
+        'password': password,
+    }
+    try:
+        with ConnectHandler(**device_params) as ssh:
+            command = 'display license | include Inactive'
+            output = ssh.send_command(command)
+            return "Inactive" in output, output
+    except NetMikoTimeoutException:
+        print(f"Тайм-аут при подключении к устройству: {ip}")
+        return None, None
+    except SSHException:
+        print(f"Проблема с SSH. Убедитесь, что SSH включен: {ip}")
+        return None, None
+    except Exception as unknown_error:
+        print(f"Произошла непредвиденная ошибка: {str(unknown_error)}")
+        return None, None
+
+try:
+    username, password = get_credentials()
+    devices_ip = get_device_ips()
+except SystemExit:
+    sys.exit(1)
+
+start_time = time.time()
+no_license_devices = []
+failed_devices = []
+
+for ip in devices_ip:
+    print(f"Проверка устройства {ip} на наличие активных лицензий...")
+    license_status, license_output = check_device_license(ip, username, password)
+
+    if license_status is None:
+        failed_devices.append(ip)
+    elif license_status:
+        no_license_devices.append(ip)
+        print(f"Устройство {ip} не имеет активных лицензий:\n{license_output}")
+    else:
+        print(f"Устройство {ip} имеет активные лицензии.")
+
+end_time = time.time()
+total_time = end_time - start_time
+
+print("\n--- Отчет ---")
+print("Устройства, к которым не удалось подключиться:")
+for device in failed_devices:
+    print(device)
+
+print("\nУстройства без активных лицензий:")
+for device in no_license_devices:
+    print(device)
+
+print("\nВремя выполнения: {:.2f} секунд".format(total_time))
